@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 
+	googleauth "demo/internal/auth/google"
 	"demo/internal/config"
 	"demo/internal/petstore"
 )
@@ -29,6 +30,18 @@ func main() {
 	router.Use(middleware.Recoverer)
 
 	serverImpl := petstore.NewInMemoryServer()
+
+	if cfg.GoogleOAuth.Enabled {
+		googleHandler, err := googleauth.NewHandler(cfg.GoogleOAuth)
+		if err != nil {
+			log.Fatalf("failed to initialize google oauth handler: %v", err)
+		}
+		router.Group(func(r chi.Router) {
+			r.Get("/auth/google/login", googleHandler.Login)
+			r.Get("/auth/google/callback", googleHandler.Callback)
+		})
+	}
+
 	handler := petstore.HandlerFromMux(serverImpl, router)
 
 	addr := cfg.Server.Address

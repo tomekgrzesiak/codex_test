@@ -1,2 +1,16 @@
 server:
   address: ":8080"
+google_oauth:
+  enabled: false
+  client_id: ""
+  client_secret: ""
+  redirect_url: "http://localhost:8080/auth/google/callback"
+  scopes:
+    - openid
+    - profile
+    - email
+  state_cookie:
+    name: oauth_state
+    path: "/"
+    max_age: 600
+    secure: false

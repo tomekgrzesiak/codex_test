@@ -7,9 +7,11 @@ require (
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/oapi-codegen/runtime v1.1.2
 	github.com/spf13/viper v1.21.0
+	golang.org/x/oauth2 v0.31.0
 )
 
 require (
+	cloud.google.com/go/compute/metadata v0.3.0 // indirect
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/fsnotify/fsnotify v1.9.0 // indirect
 	github.com/go-openapi/jsonpointer v0.21.0 // indirect
