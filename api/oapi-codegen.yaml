@@ -1,0 +1,6 @@
+package: petstore
+output: internal/petstore/petstore.gen.go
+generate:
+  chi-server: true
+  types: true
+  embedded-spec: true
