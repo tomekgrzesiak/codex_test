@@ -14,3 +14,5 @@ google_oauth:
     path: "/"
     max_age: 600
     secure: false
+database:
+  dsn: "postgres://postgres:postgres@localhost:5432/petstore?sslmode=disable"

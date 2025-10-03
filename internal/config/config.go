@@ -11,6 +11,7 @@ import (
 type Config struct {
 	Server      ServerConfig      `mapstructure:"server"`
 	GoogleOAuth GoogleOAuthConfig `mapstructure:"google_oauth"`
+	Database    DatabaseConfig    `mapstructure:"database"`
 }
 
 // ServerConfig describes HTTP server specific settings.
@@ -37,6 +38,11 @@ type OAuthStateCookieConfig struct {
 	Secure bool   `mapstructure:"secure"`
 }
 
+// DatabaseConfig describes connectivity to the backing PostgreSQL instance.
+type DatabaseConfig struct {
+	DSN string `mapstructure:"dsn"`
+}
+
 // Load returns configuration merged from defaults, config files, and environment.
 func Load() (Config, error) {
 	v := viper.New()
@@ -57,6 +63,7 @@ func Load() (Config, error) {
 	v.SetDefault("google_oauth.state_cookie.path", "/")
 	v.SetDefault("google_oauth.state_cookie.max_age", 600)
 	v.SetDefault("google_oauth.state_cookie.secure", false)
+	v.SetDefault("database.dsn", "postgres://postgres:postgres@localhost:5432/petstore?sslmode=disable")
 
 	if err := v.ReadInConfig(); err != nil {
 		if _, notFound := err.(viper.ConfigFileNotFoundError); !notFound {

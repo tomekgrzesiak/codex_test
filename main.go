@@ -12,6 +12,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5/pgxpool"
 
 	googleauth "demo/internal/auth/google"
 	"demo/internal/config"
@@ -29,7 +30,22 @@ func main() {
 	router.Use(middleware.Logger)
 	router.Use(middleware.Recoverer)
 
-	serverImpl := petstore.NewInMemoryServer()
+	if cfg.Database.DSN == "" {
+		log.Fatal("database.dsn configuration is required")
+	}
+
+	pool, err := pgxpool.New(context.Background(), cfg.Database.DSN)
+	if err != nil {
+		log.Fatalf("failed to connect to database: %v", err)
+	}
+	defer pool.Close()
+
+	repo, err := petstore.NewPostgresRepository(context.Background(), pool)
+	if err != nil {
+		log.Fatalf("failed to initialize pet repository: %v", err)
+	}
+
+	serverImpl := petstore.NewServer(repo)
 
 	if cfg.GoogleOAuth.Enabled {
 		googleHandler, err := googleauth.NewHandler(cfg.GoogleOAuth)

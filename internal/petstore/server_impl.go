@@ -3,30 +3,24 @@ package petstore
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
-	"sort"
 	"strconv"
-	"sync"
 )
 
-// InMemoryServer provides a thread-safe, in-memory implementation of the Petstore API.
-type InMemoryServer struct {
-	mu    sync.RWMutex
-	pets  map[int64]Pet
-	order []int64
+// Server implements the Petstore API backed by a PetRepository.
+type Server struct {
+	repo PetRepository
 }
 
-// NewInMemoryServer constructs an empty Petstore API server backed by in-memory storage.
-func NewInMemoryServer() *InMemoryServer {
-	return &InMemoryServer{
-		pets:  make(map[int64]Pet),
-		order: make([]int64, 0),
-	}
+// NewServer constructs a server using the supplied repository.
+func NewServer(repo PetRepository) *Server {
+	return &Server{repo: repo}
 }
 
 // ListPets returns pets up to the provided limit.
-func (s *InMemoryServer) ListPets(w http.ResponseWriter, _ *http.Request, params ListPetsParams) {
-	limit := int32(0)
+func (s *Server) ListPets(w http.ResponseWriter, r *http.Request, params ListPetsParams) {
+	var limit int32
 	if params.Limit != nil {
 		limit = *params.Limit
 		if limit < 0 {
@@ -38,30 +32,29 @@ func (s *InMemoryServer) ListPets(w http.ResponseWriter, _ *http.Request, params
 		}
 	}
 
-	s.mu.RLock()
-	pets := make([]Pet, 0, len(s.order))
-	for _, id := range s.order {
-		pets = append(pets, s.pets[id])
+	fetchLimit := limit
+	if limit > 0 {
+		fetchLimit = limit + 1
 	}
-	s.mu.RUnlock()
 
-	sort.Slice(pets, func(i, j int) bool {
-		return pets[i].Id < pets[j].Id
-	})
+	pets, err := s.repo.ListPets(r.Context(), fetchLimit)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list pets")
+		return
+	}
 
 	result := pets
-	if limit > 0 && int(limit) < len(pets) {
-		idx := int(limit)
-		result = pets[:idx]
-		nextID := pets[idx].Id
-		w.Header().Set("x-next", "/pets?limit="+strconv.FormatInt(int64(limit), 10)+"&after="+strconv.FormatInt(nextID, 10))
+	if limit > 0 && len(pets) > int(limit) {
+		result = pets[:limit]
+		nextID := pets[limit].Id
+		w.Header().Set("x-next", fmt.Sprintf("/pets?limit=%d&after=%d", limit, nextID))
 	}
 
 	writeJSON(w, http.StatusOK, result)
 }
 
 // CreatePets stores a new pet using the provided payload.
-func (s *InMemoryServer) CreatePets(w http.ResponseWriter, r *http.Request) {
+func (s *Server) CreatePets(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	var pet Pet
@@ -75,32 +68,33 @@ func (s *InMemoryServer) CreatePets(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.mu.Lock()
-	if _, exists := s.pets[pet.Id]; exists {
-		s.mu.Unlock()
-		writeError(w, http.StatusConflict, "pet already exists")
+	if err := s.repo.CreatePet(r.Context(), pet); err != nil {
+		if errors.Is(err, ErrPetExists) {
+			writeError(w, http.StatusConflict, "pet already exists")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to create pet")
 		return
 	}
-	s.pets[pet.Id] = pet
-	s.order = append(s.order, pet.Id)
-	s.mu.Unlock()
 
 	w.WriteHeader(http.StatusCreated)
 }
 
 // ShowPetById returns details for the requested pet identifier.
-func (s *InMemoryServer) ShowPetById(w http.ResponseWriter, _ *http.Request, petId string) {
+func (s *Server) ShowPetById(w http.ResponseWriter, r *http.Request, petId string) {
 	id, err := strconv.ParseInt(petId, 10, 64)
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "petId must be an integer")
 		return
 	}
 
-	s.mu.RLock()
-	pet, ok := s.pets[id]
-	s.mu.RUnlock()
-	if !ok {
-		writeError(w, http.StatusNotFound, "pet not found")
+	pet, err := s.repo.GetPet(r.Context(), id)
+	if err != nil {
+		if errors.Is(err, ErrPetNotFound) {
+			writeError(w, http.StatusNotFound, "pet not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "failed to fetch pet")
 		return
 	}
 
@@ -127,4 +121,4 @@ func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, Error{Code: int32(status), Message: message})
 }
 
-var _ ServerInterface = (*InMemoryServer)(nil)
+var _ ServerInterface = (*Server)(nil)
