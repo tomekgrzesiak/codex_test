@@ -6,16 +6,32 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"net/http/httptest"
 	"os"
-	"time"
+	"testing"
 )
 
-func main() {
-	url := flag.String("url", "https://my.secure.software/c-dev/api/public/v1/scan/CDEV/DeveloperDesktopTools/pkg:rl/DeveloperDesktopTools/curl-linux@1.21?replace=true", "POST URL")
+func TestHTTPClient(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("mock server received request:")
+		for k, v := range r.Header {
+			fmt.Printf("%s: %v\n", k, v)
+		}
+		_, _ = io.Copy(io.Discard, r.Body)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+
+	fmt.Println("boot mock server at", srv.URL)
+
+	client := srv.Client()
+
+	url := flag.String("url", srv.URL, "POST URL")
 	token := flag.String("token", "", "Bearer token")
 	filePath := flag.String("file", "/usr/bin/curl", "File to upload")
 	filename := flag.String("filename", "cu", "Filename to send in Content-Disposition header")
-	timeout := flag.Duration("timeout", 30*time.Second, "HTTP client timeout")
+
 	flag.Parse()
 
 	f, err := os.Open(*filePath)
@@ -24,7 +40,7 @@ func main() {
 	}
 	defer f.Close()
 
-	_, err = f.Stat()
+	//fs, err := f.Stat()
 	if err != nil {
 		log.Fatalf("stat file %s: %v", *filePath, err)
 	}
@@ -39,20 +55,12 @@ func main() {
 	}
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.Header.Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", *filename))
-	//req.ContentLength = fi.Size()
+	//	req.ContentLength = fs.Size()
 
-	client := &http.Client{Timeout: *timeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		log.Fatalf("request failed: %v", err)
+		t.Fatalf("request failed: %v", err)
 	}
 	defer resp.Body.Close()
-
-	body, _ := io.ReadAll(resp.Body)
-	fmt.Printf("Status: %s\n", resp.Status)
-	fmt.Printf("Response body:\n%s\n", string(body))
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		os.Exit(1)
-	}
+	fmt.Println("response status:", resp.Status)
 }
