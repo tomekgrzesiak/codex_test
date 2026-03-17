@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -19,7 +20,16 @@ import (
 	"demo/internal/petstore"
 )
 
+const banner = `
+ ____       _   ____  _
+|  _ \ ___| |_/ ___|| |_ ___  _ __ ___
+| |_) / _ \ __\___ \| __/ _ \| '__/ _ \
+|  __/  __/ |_ ___) | || (_) | | |  __/
+|_|   \___|\__|____/ \__\___/|_|  \___|
+`
+
 func main() {
+	fmt.Print(banner)
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("failed to load configuration: %v", err)
