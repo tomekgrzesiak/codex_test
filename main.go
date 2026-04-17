@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -12,12 +13,23 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jackc/pgx/v5/pgxpool"
 
+	googleauth "demo/internal/auth/google"
 	"demo/internal/config"
 	"demo/internal/petstore"
 )
 
+const banner = `
+ ____       _   ____  _
+|  _ \ ___| |_/ ___|| |_ ___  _ __ ___
+| |_) / _ \ __\___ \| __/ _ \| '__/ _ \
+|  __/  __/ |_ ___) | || (_) | | |  __/
+|_|   \___|\__|____/ \__\___/|_|  \___|
+`
+
 func main() {
+	fmt.Print(banner)
 	cfg, err := config.Load()
 	if err != nil {
 		log.Fatalf("failed to load configuration: %v", err)
@@ -28,7 +40,34 @@ func main() {
 	router.Use(middleware.Logger)
 	router.Use(middleware.Recoverer)
 
-	serverImpl := petstore.NewInMemoryServer()
+	if cfg.Database.DSN == "" {
+		log.Fatal("database.dsn configuration is required")
+	}
+
+	pool, err := pgxpool.New(context.Background(), cfg.Database.DSN)
+	if err != nil {
+		log.Fatalf("failed to connect to database: %v", err)
+	}
+	defer pool.Close()
+
+	repo, err := petstore.NewPostgresRepository(context.Background(), pool)
+	if err != nil {
+		log.Fatalf("failed to initialize pet repository: %v", err)
+	}
+
+	serverImpl := petstore.NewServer(repo)
+
+	if cfg.GoogleOAuth.Enabled {
+		googleHandler, err := googleauth.NewHandler(cfg.GoogleOAuth)
+		if err != nil {
+			log.Fatalf("failed to initialize google oauth handler: %v", err)
+		}
+		router.Group(func(r chi.Router) {
+			r.Get("/auth/google/login", googleHandler.Login)
+			r.Get("/auth/google/callback", googleHandler.Callback)
+		})
+	}
+
 	handler := petstore.HandlerFromMux(serverImpl, router)
 
 	addr := cfg.Server.Address
